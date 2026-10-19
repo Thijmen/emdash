@@ -17,9 +17,9 @@ created: 2026-10-19
 
 Plugins, including sandboxed plugins installed from the registry, call AI models through one provider that the site owner configures. The pieces:
 
-- **`ai:run`.** A plugin declares the capability and calls `ctx.ai.run()` with messages and, optionally, tools.
+- **`ai:run`.** A plugin declares the capability. It calls `ctx.ai.run()` with messages and, optionally, tools, and `ctx.ai.models()` to list the models the site offers, with names, tool support, context windows and prices.
 - **`ai:generate`.** One exclusive provider hook answers the call. Registering it requires `hooks.ai-provider:register`.
-- **`cloudflareAI()`.** A provider in `@emdash-cms/cloudflare/plugins` that answers through the Worker's `AI` binding. It runs Workers AI models and, through AI Gateway unified billing, third-party models such as `anthropic/…` and `openai/…`.
+- **`cloudflareAI()`.** A provider in `@emdash-cms/cloudflare/plugins` that answers through the Worker's `AI` binding. Without options it offers every text-generation model in Cloudflare's catalog, about 100: Workers AI models and, through AI Gateway unified billing, third-party models such as `anthropic/…`, `openai/…` and `google/…`.
 - **`declaredAccess`.** The registry gains an `ai` category, so install consent shows AI use.
 
 The design follows `email:send`. The calling plugin never holds a credential, and the site owner chooses models, limits and the gateway in one place.
@@ -59,15 +59,11 @@ The site owner registers the provider once. A site that already uses Workers AI 
 import { cloudflareAI } from "@emdash-cms/cloudflare/plugins";
 
 emdash({
-	plugins: [
-		cloudflareAI({
-			defaultModel: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-			models: ["@cf/meta/llama-3.3-70b-instruct-fp8-fast", "anthropic/claude-sonnet-5"],
-			maxTokens: 4000,
-		}),
-	],
+	plugins: [cloudflareAI()],
 });
 ```
+
+Every text-generation model in Cloudflare's catalog is then available to plugins. Third-party models need AI Gateway credits on the account. A site owner who wants fewer models, another default or a token cap passes `models`, `defaultModel` or `maxTokens`.
 
 A sandboxed plugin declares the capability:
 
@@ -78,7 +74,20 @@ A sandboxed plugin declares the capability:
 }
 ```
 
-The plugin writes a related-reading paragraph. It lets the model search the site and runs the tool calls itself:
+The plugin's settings page offers the site's models that support tool calls, in a Block Kit combobox:
+
+```ts title="src/plugin.ts"
+const models = await ctx.ai!.models({ tools: true });
+const modelPicker = {
+	type: "combobox",
+	action_id: "model",
+	label: "Model",
+	options: models.map((model) => ({ label: `${model.name} (${model.provider})`, value: model.id })),
+	initial_value: settings.model ?? models.find((model) => model.default)?.id,
+};
+```
+
+The plugin writes a related-reading paragraph with the chosen model. It lets the model search the site and runs the tool calls itself:
 
 ```ts title="src/plugin.ts"
 const tools: AiTool[] = [
@@ -102,7 +111,7 @@ const messages: AiMessage[] = [
 
 for (let step = 0; step < 3; step++) {
 	const result = await ctx.ai!.run({
-		model: "anthropic/claude-sonnet-5",
+		model: settings.model,
 		messages,
 		tools,
 		maxTokens: 800,
@@ -129,7 +138,8 @@ The install dialog lists "Run AI models through your site's AI provider, billed 
 
 - Let sandboxed and trusted plugins run text-generation models, with tool calling, without holding credentials.
 - Keep credentials, model choice and spend limits with the site owner, in one provider.
-- Make a Cloudflare site's setup two lines: the `AI` binding and `cloudflareAI()`. That covers Workers AI models and third-party models through unified billing.
+- Make a Cloudflare site's setup two lines, the `AI` binding and `cloudflareAI()`, after which every text-generation model in Cloudflare's catalog works for every plugin.
+- Let plugins list the site's models with names, tool support, context windows and prices, so they can offer a picker and show costs instead of asking for a model id.
 - Give plugin authors one request and result shape for every model family, with errors they can branch on.
 - Make AI use a reviewable grant in the manifest, in `declaredAccess` and in install consent.
 - Attribute every request to the calling plugin, so providers and AI Gateway can log, limit and bill per plugin.
@@ -166,6 +176,31 @@ They are separate for the same reason `email:send` and `hooks.email-transport:re
 ```ts
 interface AiAccess {
 	run(request: AiRunRequest): Promise<AiRunResult>;
+	/** The models the site offers, default first. */
+	models(query?: AiModelsQuery): Promise<AiModel[]>;
+}
+
+interface AiModelsQuery {
+	/** Only models known to accept tools. */
+	tools?: boolean;
+}
+
+interface AiModel {
+	/** Pass as `model` to run(). */
+	id: string;
+	/** Display name, such as "Claude Sonnet 5". */
+	name: string;
+	/** Who makes the model, such as "Anthropic" or "Meta". */
+	provider: string;
+	description?: string;
+	/** True for the model run() uses when a request names none. */
+	default: boolean;
+	/** Whether the model accepts tools. Absent when the provider doesn't know. */
+	tools?: boolean;
+	/** Context window in tokens, when known. */
+	contextWindow?: number;
+	/** List price in US dollars per million tokens, when known. */
+	pricing?: { input: number; output: number; cacheRead?: number; cacheWrite?: number };
 }
 
 interface AiRunRequest {
@@ -220,7 +255,24 @@ interface AiRunResult {
 }
 ```
 
-Model ids are provider-specific strings. A plugin that omits `model` works with any provider. A plugin that names one should let the site owner change it in its settings.
+Model ids are provider-specific strings. A plugin gets valid ids from `ctx.ai.models()`, or omits `model` to use the provider's default, which works with any provider.
+
+### Model discovery
+
+`ctx.ai.models()` returns the models the site offers, so a plugin can build a picker, label it, and show what a run costs.
+
+- **Order.** The default model comes first, then the rest by `provider` and `name`.
+- **Filter.** `{ tools: true }` keeps only models whose `tools` is `true`. Models with unknown tool support are left out, so a picker for a tool loop offers no model that fails on tools.
+- **Allow-list.** The list reflects the site's allow-list. A plugin never sees a model the provider would refuse.
+- **Pricing.** `pricing` is the provider's list price. A plugin computes a run's cost from it and `usage`; the provider's own billing can differ, for example by credit fees.
+- **Validation.** The pipeline validates the provider's list, as it validates results:
+  - It keeps at most 1,000 models and drops duplicate ids.
+  - `id`, `name` and `provider` are non-empty strings of at most 200 characters, and `description` is trimmed to 1,000.
+  - At most one model is the default.
+  - Numbers are finite and at least 0.
+  - It drops malformed entries and logs them once per isolate.
+- **No list.** A provider without an `ai:models` handler lists no models. `models()` then returns `[]`, and plugins fall back to omitting `model`.
+- **Errors.** `models()` rejects with `AI_NOT_CONFIGURED` when no provider is selected, and with `AI_PROVIDER_ERROR` when the provider's handler fails.
 
 ### Tool calls
 
@@ -337,6 +389,14 @@ type AiGenerateHandler = (event: AiGenerateEvent, ctx: PluginContext) => Promise
   - An `AsyncLocalStorage` guard catches calls made in-process while a provider is answering.
   - Requests whose `source` is the selected provider's ID are refused too. This covers a sandboxed provider, whose calls arrive over RPC in a fresh async context.
 
+A provider lists its models through a second hook, `ai:models`, gated by the same capability:
+
+```ts
+type AiModelsHandler = (event: { source: string }, ctx: PluginContext) => Promise<AiModel[]>;
+```
+
+`ai:models` isn't selected on its own. The pipeline calls the `ai:models` handler of the plugin selected for `ai:generate`, so the list always describes the provider that answers `run()`. The pipeline applies the `tools` filter itself, so providers return their full list.
+
 ### Provider selection
 
 Selection reuses the exclusive-hook machinery unchanged:
@@ -354,14 +414,17 @@ Both sandbox runners get the same addition `email:send` has.
   - It checks `ai:run` against the bridge's host-side props.
   - It caps `timeoutMs`.
   - It calls the runner's AI callback, with the bridge's plugin ID as `source`.
-- **`@emdash-cms/sandbox-workerd`.** The same, through an `ai/run` bridge call.
-- **Runners.** They expose an optional `setAiRun(callback)` on `SandboxRunner`, so other runners keep compiling. The runtime wires it to `AiPipeline.run()` at startup.
+
+  `PluginBridge.aiModels()` checks `ai:run` the same way and returns the pipeline's filtered list.
+
+- **`@emdash-cms/sandbox-workerd`.** The same, through `ai/run` and `ai/models` bridge calls.
+- **Runners.** They expose an optional `setAi({ run, models })` on `SandboxRunner`, so other runners keep compiling. The runtime wires it to `AiPipeline.run()` and `AiPipeline.models()` at startup.
 
 `source` always comes from the host side, never from the request.
 
 ### `cloudflareAI()`
 
-`cloudflareAI()` is a native plugin in `@emdash-cms/cloudflare/plugins`, modelled on `cloudflareEmail()`. Its entrypoint is `@emdash-cms/cloudflare/plugins/cloudflare-ai`.
+`cloudflareAI()` is a native plugin in `@emdash-cms/cloudflare/plugins`, modelled on `cloudflareEmail()`. Its entrypoint is `@emdash-cms/cloudflare/plugins/cloudflare-ai`. It works without options.
 
 ```ts
 interface CloudflareAIConfig {
@@ -371,26 +434,39 @@ interface CloudflareAIConfig {
 	gateway?: string;
 	/** Model for requests that name none. Default "@cf/meta/llama-3.3-70b-instruct-fp8-fast". */
 	defaultModel?: string;
-	/** When set, the only model ids plugins may request. */
+	/** Narrows the catalog to these ids, for models() and run(). Default: the whole catalog. */
 	models?: string[];
 	/** Upper bound on output tokens for any request. */
 	maxTokens?: number;
 }
 ```
 
-Every request goes through one call:
+#### Catalog
+
+`models()` lists every text-generation model in Cloudflare's catalog, narrowed by `models` when it is set.
+
+- **Workers AI models.** They come from the binding's `env.AI.models({ task: "Text Generation" })`, which returns each model's listed properties. Cloudflare's model pages show function calling, context window and price for Workers AI models.
+- **Third-party models.** Cloudflare has no API for them. They are listed on Cloudflare's model catalog page, `developers.cloudflare.com/ai/models`, and each model's page gives its context window and its prices for input, output, cached input and cache creation.
+  - `cloudflareAI()` ships a snapshot of that catalog, which a script regenerates before each release.
+  - At runtime it refreshes the snapshot at most once a day, in the background with `after()`, and stores the result in its plugin KV.
+- **Tool support.** The third-party pages don't state it. The snapshot marks a third-party model as accepting tools when its family's translation supports tool calls.
+- **Gaps.** Where a Workers AI property is missing, the snapshot supplies it.
+- **Caching.** The provider keeps the merged list in memory for 10 minutes per isolate.
+
+A request may name a model the catalog doesn't list yet. Unless `models` is set, the provider passes it to the binding, which accepts or refuses it.
+
+#### Requests
+
+Every request runs on the binding with these gateway options:
 
 ```ts
-env[binding].run(model, inputs, {
-	gateway: { id: gateway, metadata: { plugin: source, ...metadata }, requestTimeoutMs },
-	extraHeaders,
-});
+{ gateway: { id: gateway, metadata: { plugin: source, ...metadata }, requestTimeoutMs } }
 ```
 
-That call means AI Gateway's logs, rate limits and spend limits apply to every request:
+AI Gateway's logs, rate limits and spend limits therefore apply to every request.
 
 - `@cf/…` ids run on Workers AI.
-- `provider/model` ids run through AI Gateway unified billing and are billed to the Cloudflare account.
+- `provider/model` ids run through AI Gateway unified billing. They are billed to the Cloudflare account and need credits on it.
 
 Before calling, the provider:
 
@@ -398,20 +474,28 @@ Before calling, the provider:
 - caps `maxTokens`;
 - fails with `AI_PROVIDER_ERROR`, naming the wrangler setting to add, when the binding is missing.
 
-It translates the request to each model family's wire format:
+#### Wire formats
 
-| Model ids                                  | Wire format                                                                         | Tools                                                                                                                     | `promptCacheKey`                                           | Cache usage                                              |
-| ------------------------------------------ | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- | -------------------------------------------------------- |
-| `@cf/…`                                    | Workers AI `messages`                                                               | Function-style `tools`. Calls are read from top-level `tool_calls` or from `choices`, and ids are generated when missing. | `x-session-affinity` header, for Workers AI prefix caching | As the model reports it                                  |
-| `anthropic/…`                              | Anthropic Messages: `system` as a string, `max_tokens` always set (4096 by default) | `tools[].input_schema`, `tool_use` and `tool_result` blocks; consecutive tool messages merged into one user turn          | `cache_control` breakpoint on the last message             | `cache_read_input_tokens`, `cache_creation_input_tokens` |
-| `openai/…`, other ids on the OpenAI format | Chat completions                                                                    | `tools[].function`, `tool_calls`, `role: "tool"`                                                                          | `prompt_cache_key`                                         | `usage.prompt_tokens_details.cached_tokens`              |
+`cloudflareAI()` translates requests with Cloudflare's `workers-ai-provider`, the AI SDK provider for the `AI` binding, so every family in the catalog works. It calls that package's language models directly, without the `ai` package.
 
-Families that need another format, such as Google's, which `workers-ai-provider` translates separately, need a translation of their own. Until a family has one, the provider refuses its models with `AI_MODEL_NOT_ALLOWED`.
+- **Workers AI.** `@cf/…` models run on the binding with Workers AI inputs.
+- **Families with their own translation.** OpenAI, Anthropic, Google, xAI, Groq, Alibaba, MiniMax and DeepSeek models use `workers-ai-provider`'s translation for that family.
+- **Other families.** These use the OpenAI chat-completions format on the unified-billing run path.
+- **Claude's system prompt.** The unified-billing run path needs it as a plain string. The author's writer patches the request body for this. The fix belongs in `workers-ai-provider`, and `cloudflareAI()` carries it until it lands there.
+
+Per family, the request's options map as follows:
+
+| Model ids                                 | Tools                                                                             | `promptCacheKey`                                           | Cache usage                                              |
+| ----------------------------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------- | -------------------------------------------------------- |
+| `@cf/…`                                   | Function-style `tools`. Ids are generated when the model returns none.            | `x-session-affinity` header, for Workers AI prefix caching | As the model reports it                                  |
+| `anthropic/…`                             | `tool_use` and `tool_result` blocks. `max_tokens` is always set, 4096 by default. | `cache_control` breakpoint on the last message             | `cache_read_input_tokens`, `cache_creation_input_tokens` |
+| `openai/…` and other OpenAI-format models | `tools[].function`, `tool_calls`, `role: "tool"`                                  | `prompt_cache_key`                                         | `usage.prompt_tokens_details.cached_tokens`              |
+| Other families                            | The family translation's tool format                                              | Not used                                                   | As the model reports it                                  |
 
 The provider normalizes every answer to `AiRunResult`:
 
 - It strips inline `<think>…</think>` reasoning from `text`.
-- It maps stop reasons to `finishReason`: Anthropic's `max_tokens` becomes `length`, and `tool_use` becomes `tool_calls`.
+- It maps stop reasons to `finishReason`. For example, Anthropic's `max_tokens` becomes `length`, and `tool_use` becomes `tool_calls`.
 
 ### Registry: `declaredAccess`
 
@@ -444,7 +528,8 @@ In RFC 0001's enforcement terms:
 - **Settings → AI.** This page is modelled on Settings → Email:
   - It shows the selected provider, and switches between active providers through the existing exclusive-hook routes.
   - It lists the installed plugins that declare `ai:run`.
-  - It needs no new API, and its strings are wrapped for translation.
+  - For `cloudflareAI()`, it shows the catalog, with prices, so the site owner can choose the allowed models and the default without a deploy. Those choices are stored in the provider's plugin settings and override `models` and `defaultModel` from the config.
+  - It uses the existing exclusive-hook routes and plugin settings, and its strings are wrapped for translation.
 
 ### Testing support
 
@@ -452,6 +537,7 @@ In RFC 0001's enforcement terms:
 
 - `host.ai.respond(result)` queues the next result, tool calls included.
 - `host.ai.fail(code, message)` queues an error.
+- `host.ai.models(list)` sets what `ctx.ai.models()` returns.
 - `host.ai.requests()` returns the requests received, each with the calling plugin's `source`.
 - `host.ai.clear()` resets the queue and the recorded requests.
 
@@ -462,7 +548,7 @@ Plugin authors can test a tool loop from the isolate without a model.
 - **Cloudflare.** Sandboxed and trusted plugins get `ctx.ai`, and `cloudflareAI()` is the provider.
 - **Node with `@emdash-cms/sandbox-workerd`.** Sandboxed plugins reach `ctx.ai` through the workerd bridge. No provider is bundled, so the site needs a provider plugin that calls a model over HTTP.
 - **Node without a sandbox.** Trusted plugins get `ctx.ai` from any provider.
-- **`astro dev` with the Cloudflare adapter.** `cloudflareAI()` needs remote bindings, because Workers AI only runs remotely. Without them, requests fail with the missing-binding error.
+- **`astro dev` with the Cloudflare adapter.** `cloudflareAI()` needs remote bindings, because Workers AI only runs remotely. Without them, `models()` lists the bundled snapshot, so pickers still work, and requests fail with the missing-binding error.
 
 ## Compatibility and migration
 
@@ -506,22 +592,28 @@ Rollback is removing the provider plugin. `ctx.ai` then disappears, and calling 
 - **Bridge.** A sandboxed call is one bridge call, like `ctx.email.send()`. The model call runs in the host Worker and doesn't count toward the plugin's outgoing calls, but the plugin's wall time includes the wait.
 - **Compared with the workaround.** It saves the secret-setting read and the `ctx.http` round trip per call.
 - **Validation.** It is linear in request size. The 4 MB cap bounds both validation and the RPC payload.
-- **Bundle.** `cloudflareAI()` is a separate entrypoint, so sites that don't register it don't load it.
+- **Model lists.** A sandboxed `ctx.ai.models()` call is one bridge call.
+  - `cloudflareAI()` answers from memory for 10 minutes.
+  - After that, it answers from its plugin KV plus one `env.AI.models()` call.
+  - The daily catalog refresh runs after the response.
+- **Bundle.** `cloudflareAI()` is a separate entrypoint, so sites that don't register it don't load it. It brings `workers-ai-provider` and the AI SDK provider packages for the families it translates. The implementation pull request reports the size this adds to the Worker.
 
 ## Failure handling
 
-| Failure                                       | Caller sees                                                            |
-| --------------------------------------------- | ---------------------------------------------------------------------- |
-| No provider                                   | `ctx.ai === undefined` (trusted) or `AI_NOT_CONFIGURED` (sandboxed)    |
-| Missing `ai:run`                              | `ctx.ai === undefined`; the bridge throws `Missing capability: ai:run` |
-| Malformed request                             | `AI_INVALID_REQUEST`, naming the field                                 |
-| Model not allowed or not served               | `AI_MODEL_NOT_ALLOWED`                                                 |
-| `timeoutMs` passed                            | `AI_TIMEOUT`; the gateway stops the model call                         |
-| Rate limited                                  | `AI_RATE_LIMITED`                                                      |
-| No credit, gateway auth error, upstream error | `AI_PROVIDER_ERROR` with the provider's message                        |
-| Provider exceeds its hook timeout             | `AI_TIMEOUT`                                                           |
-| Malformed provider result                     | `AI_INVALID_RESULT`                                                    |
-| Provider calls `ctx.ai.run()`                 | `AI_RECURSION`                                                         |
+| Failure                                       | Caller sees                                                                         |
+| --------------------------------------------- | ----------------------------------------------------------------------------------- |
+| No provider                                   | `ctx.ai === undefined` (trusted) or `AI_NOT_CONFIGURED` (sandboxed)                 |
+| Missing `ai:run`                              | `ctx.ai === undefined`; the bridge throws `Missing capability: ai:run`              |
+| Malformed request                             | `AI_INVALID_REQUEST`, naming the field                                              |
+| Model not allowed or not served               | `AI_MODEL_NOT_ALLOWED`                                                              |
+| `timeoutMs` passed                            | `AI_TIMEOUT`; the gateway stops the model call                                      |
+| Rate limited                                  | `AI_RATE_LIMITED`                                                                   |
+| No credit, gateway auth error, upstream error | `AI_PROVIDER_ERROR` with the provider's message                                     |
+| Provider exceeds its hook timeout             | `AI_TIMEOUT`                                                                        |
+| Malformed provider result                     | `AI_INVALID_RESULT`                                                                 |
+| Provider calls `ctx.ai.run()`                 | `AI_RECURSION`                                                                      |
+| Provider has no `ai:models` handler           | `models()` returns `[]`                                                             |
+| Catalog refresh or `env.AI.models()` fails    | `models()` serves the stored catalog or the bundled snapshot; the failure is logged |
 
 - **Retries.** Core never retries, because model calls cost money and aren't idempotent. Retrying is the caller's decision, guided by `code`.
 - **Partial failure.** A tool loop that fails midway has written nothing unless the plugin chose to. Its earlier tool calls were the plugin's own actions.
@@ -538,11 +630,17 @@ Rollback is removing the provider plugin. `ctx.ai` then disappears, and calling 
   - error-code mapping for provider errors;
   - both recursion paths;
   - hook registration skipped without `hooks.ai-provider:register`;
-  - `ctx.ai` gating by capability and provider.
+  - `ctx.ai` gating by capability and provider;
+  - `models()` ordering, the `tools` filter, list validation, and `[]` without an `ai:models` handler.
 - **`plugin-types` unit tests:**
   - capability and `declaredAccess` round trips for both operations;
   - manifest schema acceptance;
   - capability descriptions.
+- **`cloudflareAI()` catalog tests:**
+  - merging `env.AI.models()` with the snapshot;
+  - narrowing by `models`;
+  - falling back to the stored catalog and the snapshot;
+  - the snapshot script's parser against a saved copy of the catalog page.
 - **`cloudflareAI()` unit tests, per wire format:**
   - request translation, including tools, tool results and `promptCacheKey`;
   - result normalization, including tool calls, generated ids, `<think>` stripping, stop reasons and cache usage;
@@ -563,27 +661,30 @@ Rollback is removing the provider plugin. `ctx.ai` then disappears, and calling 
 - **Admin.** The consent label list, and Settings → AI with one provider, several providers and none.
 - **Manual:**
   - Deploy a site with `cloudflareAI()` and a sandboxed plugin that declares `ai:run`.
-  - Run one `@cf/…` and one `anthropic/…` tool loop.
+  - Confirm a plugin's picker lists the full catalog with prices, and the narrowed list when `models` is set.
+  - Run one `@cf/…`, one `anthropic/…` and one `google/…` tool loop.
   - Confirm the gateway log shows `plugin` and the plugin's metadata, and that cached tokens appear on the second Anthropic step.
   - Check a disallowed model, an expired timeout and a missing binding.
 
 ## Rollout and implementation
 
 1. **Core contract:**
-   - capabilities, types, `AiError`, hook, `AiPipeline` and `ctx.ai`;
+   - capabilities, types, `AiError`, the `ai:generate` and `ai:models` hooks, `AiPipeline` and `ctx.ai`;
    - the manifest schemas;
    - capability descriptions and consent labels;
    - the `declaredAccess` mapping and lexicon;
    - the plugin-test provider;
    - docs (capabilities, hooks reference).
 2. **Sandbox bridges.** The Cloudflare and workerd runners and wrappers, with error codes and the timeout cap.
-3. **`cloudflareAI()`.** The provider, its three wire formats and its Cloudflare deployment docs.
-4. **Settings → AI.** The admin page.
+3. **`cloudflareAI()`.** The provider on `workers-ai-provider`, the catalog snapshot and its sync script, and its Cloudflare deployment docs.
+4. **Settings → AI.** The admin page, including model choices for `cloudflareAI()`.
 
 Slices 1 to 3 land in one implementation pull request, because none is useful without the others. Slice 4 can follow: a single provider is selected automatically, and the existing exclusive-hook routes allow switching. No feature flag is needed, because nothing changes until a site registers a provider and installs a plugin that declares `ai:run`. Each published package gets a changeset.
 
-A prototype on the [`feat/plugin-ai-access` branch of the author's fork](https://github.com/Thijmen/emdash/tree/feat/plugin-ai-access) implements the text-only path through slices 1 to 3. It covers the capabilities, the hook, validation, both bridges, `cloudflareAI()` for the three formats, the test host and docs, with unit tests and an isolate end-to-end test. Not yet prototyped:
+A prototype on the [`feat/plugin-ai-access` branch of the author's fork](https://github.com/Thijmen/emdash/tree/feat/plugin-ai-access) implements the text-only path through slices 1 to 3. It covers the capabilities, the hook, validation, both bridges, `cloudflareAI()` with its own translations for Workers AI, Anthropic and OpenAI-format models, the test host and docs, with unit tests and an isolate end-to-end test. Not yet prototyped:
 
+- `ctx.ai.models()`, the `ai:models` hook and the catalog;
+- the switch to `workers-ai-provider`;
 - tool calls;
 - `timeoutMs` and the bridge cap;
 - `metadata` and `promptCacheKey`;
@@ -602,14 +703,17 @@ A prototype on the [`feat/plugin-ai-access` branch of the author's fork](https:/
 - **A generic `bindings:<name>` capability.** It has the same problems for every binding, and plugins would depend on each site's wrangler config.
 - **A core AI client without a hook.** Core could call `env.AI` directly. That fixes the provider to Cloudflare, duplicates the exclusive-hook design email already uses, and stops site owners bringing their own provider.
 - **OpenAI's chat-completions format as the contract.** Many models accept it, and plugin authors know it. It also brings a vendor-controlled, changing schema into EmDash's public API, with fields no other provider maps. A smaller EmDash-owned shape is easier to validate and keep stable, and providers translate. This is an open question for Maintainers.
+- **EmDash-maintained translations.** `cloudflareAI()` could translate each family itself, as the prototype does for three. That avoids the dependency, but EmDash would track every provider's format changes, and families without a translation would stay unavailable.
+- **Only `env.AI.models()` for the catalog.** It is an API, but it lists only Workers AI models, so third-party models would be missing from every picker.
 - **Core-run tool execution.** EmDash could run tools itself, declared in the manifest like `mcp.tools`. That belongs with long-running sessions, where EmDash drives the loop across invocations. A plugin-run loop covers the single-invocation case without new execution paths.
 
 ## Drawbacks
 
 - **Maintenance.** The design adds a public API, two capabilities, a hook, an error type and a registry category that EmDash maintains.
-- **Translation code.** `cloudflareAI()` carries a translation for each model family, and every new family needs one.
+- **Dependency.** `cloudflareAI()` depends on `workers-ai-provider` and the AI SDK provider packages. That adds to the Worker bundle of sites that use it and ties its fixes to their releases.
+- **Catalog freshness.** Third-party models come from a docs page and a bundled snapshot. If Cloudflare restructures the page, the catalog stays on the last good copy until a release.
 - **Lowest common denominator.** There is no streaming, forced tool choice, images or JSON mode until follow-ups land.
-- **Model ids.** They are provider-specific and leak into plugin settings.
+- **Model ids.** They are provider-specific. `ctx.ai.models()` puts them in a picker, but a plugin's saved choice stops working when the model is retired.
 - **Cost exposure.** Every plugin that declares `ai:run` can spend the site owner's money. Consent, the provider's limits and AI Gateway mitigate this, and core doesn't enforce budgets.
 
 ## Open questions
@@ -617,6 +721,8 @@ A prototype on the [`feat/plugin-ai-access` branch of the author's fork](https:/
 - **Contract shape.** Should the contract stay EmDash-owned, as specified here, or follow OpenAI's chat-completions format?
 - **Budgets.** Should core enforce per-plugin request or token budgets, and should `ai.run` constraint keys, such as a declared token ceiling, be defined in this RFC?
 - **Tool choice and JSON mode.** Should the request support forcing a tool (`toolChoice`) or a JSON response format? Workers AI models support both unevenly.
-- **Model discovery.** Should plugins be able to read the provider's allowed models and default model, through `ctx.ai.models()`, to offer a picker instead of a free-text id?
+- **Catalog API.** Could Cloudflare list third-party models through the binding, for example in `env.AI.models()`, so `cloudflareAI()` doesn't depend on a docs page?
+- **Tool support data.** Third-party model pages don't state tool support. Is inferring it from the family's translation acceptable, or should the catalog carry it?
+- **Retired models.** When the catalog drops a plugin's saved model, should `run()` fall back to the default model, or reject with `AI_MODEL_NOT_ALLOWED` so the site owner notices?
 - **Names.** Are `ai:run`, `hooks.ai-provider:register` and `ai:generate` the right names, leaving room for `ai:embed`?
 - **Size limits.** Is a 4 MB request limit right for the sandbox bridge's RPC payloads and for models with large context windows?
