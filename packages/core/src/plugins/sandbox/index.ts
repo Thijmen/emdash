@@ -25,6 +25,7 @@ export type {
 	SandboxOptions,
 	SandboxEmailMessage,
 	SandboxEmailSendCallback,
+	SandboxAiRunCallback,
 	SandboxCommentModerateCallback,
 	SandboxContentCreateCallback,
 	SandboxHttpFetchCallback,

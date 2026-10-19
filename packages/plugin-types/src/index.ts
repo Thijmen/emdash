@@ -74,8 +74,11 @@ export type PluginCapability =
 	| "users:read"
 	// Email
 	| "email:send"
+	// AI
+	| "ai:run" // ctx.ai (requires a configured `ai:generate` provider)
 	// Hook registration
 	| "hooks.email-transport:register" // exclusive `email:deliver` (transport)
+	| "hooks.ai-provider:register" // exclusive `ai:generate` (model provider)
 	| "hooks.email-events:register" // `email:beforeSend` / `email:afterSend`
 	| "hooks.page-fragments:register" // `page:fragments` (script/style injection)
 	// Deprecated aliases (kept for the deprecation window; warnings emitted at
@@ -223,6 +226,7 @@ export interface DeclaredAccess {
 	};
 	network?: { request?: { allowedHosts?: string[] } };
 	email?: { send?: AccessConstraints; events?: AccessConstraints; transport?: AccessConstraints };
+	ai?: { run?: AccessConstraints; provider?: AccessConstraints };
 	page?: { fragments?: AccessConstraints };
 	users?: { read?: AccessConstraints };
 }
@@ -296,6 +300,8 @@ export function capabilitiesToDeclaredAccess(
 	if (caps.has("email:send")) (out.email ??= {}).send = {};
 	if (caps.has("hooks.email-events:register")) (out.email ??= {}).events = {};
 	if (caps.has("hooks.email-transport:register")) (out.email ??= {}).transport = {};
+	if (caps.has("ai:run")) (out.ai ??= {}).run = {};
+	if (caps.has("hooks.ai-provider:register")) (out.ai ??= {}).provider = {};
 	if (caps.has("hooks.page-fragments:register")) out.page = { fragments: {} };
 	if (caps.has("users:read")) out.users = { read: {} };
 
@@ -374,6 +380,8 @@ export function declaredAccessToCapabilities(declaredAccess: DeclaredAccess): {
 	if (declaredAccess.email?.send) caps.add("email:send");
 	if (declaredAccess.email?.events) caps.add("hooks.email-events:register");
 	if (declaredAccess.email?.transport) caps.add("hooks.email-transport:register");
+	if (declaredAccess.ai?.run) caps.add("ai:run");
+	if (declaredAccess.ai?.provider) caps.add("hooks.ai-provider:register");
 	if (declaredAccess.page?.fragments) caps.add("hooks.page-fragments:register");
 	if (declaredAccess.users?.read) caps.add("users:read");
 

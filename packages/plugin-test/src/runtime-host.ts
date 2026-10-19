@@ -51,6 +51,7 @@ import {
 	validateEditorDraftRequest,
 	type UserInfo,
 } from "emdash/internal/plugin-test-runtime";
+import type { AiRunRequest, AiRunResult } from "emdash/plugin";
 import { Kysely } from "kysely";
 
 import type { PluginStorageTestEntry, PluginTestCollection, PluginTestRequest } from "./index.js";
@@ -335,6 +336,15 @@ export interface PluginRuntimeTestHost {
 		requests(): PluginHttpTestRequest[];
 		clear(): void;
 	};
+	/**
+	 * The test AI provider: every ctx.ai.run() call is answered with the next
+	 * queued result, and recorded with the calling plugin's ID.
+	 */
+	ai: {
+		respond(result: AiRunResult): void;
+		requests(): Array<AiRunRequest & { source: string }>;
+		clear(): void;
+	};
 	restart(): Promise<void>;
 	dispose(): Promise<void>;
 }
@@ -400,8 +410,11 @@ export async function createPluginRuntimeTestHost(
 		options.site?.locale ?? options.i18n?.defaultLocale ?? "en",
 	);
 	await optionRepo.set("emdash:exclusive_hook:email:deliver", "plugin-test-email-transport");
+	await optionRepo.set("emdash:exclusive_hook:ai:generate", "plugin-test-ai-provider");
 
 	const capturedEmail: Array<Record<string, unknown>> = [];
+	const capturedAiRequests: Array<AiRunRequest & { source: string }> = [];
+	const aiResults: AiRunResult[] = [];
 	const capturedHttpRequests: PluginHttpTestRequest[] = [];
 	const httpResponses = new Map<string, PluginHttpResponseWire[]>();
 	const httpFetch: typeof fetch = async (input, init) => {
@@ -461,12 +474,29 @@ export async function createPluginRuntimeTestHost(
 			},
 		},
 	});
+	const aiProvider = definePlugin({
+		id: "plugin-test-ai-provider",
+		version: "1.0.0",
+		capabilities: ["hooks.ai-provider:register"],
+		hooks: {
+			"ai:generate": {
+				exclusive: true,
+				handler: async (event) => {
+					capturedAiRequests.push({ ...event.request, source: event.source });
+					const result = aiResults.shift();
+					if (!result)
+						throw new Error("No plugin AI test result queued; call host.ai.respond() first");
+					return result;
+				},
+			},
+		},
+	});
 	const deps = {
 		config: {
 			database: { entrypoint, type: "sqlite" as const, config: { binding: "DB" } },
 			storage: { entrypoint: `${entrypoint}-storage`, config: {} },
 		},
-		plugins: [emailTransport],
+		plugins: [emailTransport, aiProvider],
 		createDialect: () => createDialect({ binding: "DB", session: "disabled" }),
 		createStorage: () => storage,
 		createScheduler: null,
@@ -1194,6 +1224,24 @@ export async function createPluginRuntimeTestHost(
 				assertActive();
 				capturedHttpRequests.length = 0;
 				httpResponses.clear();
+			},
+		},
+		ai: {
+			respond(result) {
+				assertActive();
+				aiResults.push(result);
+			},
+			requests() {
+				assertActive();
+				return capturedAiRequests.map((request) => ({
+					...request,
+					messages: [...request.messages],
+				}));
+			},
+			clear() {
+				assertActive();
+				capturedAiRequests.length = 0;
+				aiResults.length = 0;
 			},
 		},
 		async restart() {

@@ -31,6 +31,7 @@ import type {
 	SandboxContentCreateCallback,
 	PluginHttpResponseWire,
 	SandboxEmailSendCallback,
+	SandboxAiRunCallback,
 	Storage,
 	TaxonomyAccessWithWrite,
 	VersionedRedirect,
@@ -113,6 +114,8 @@ function invalidCommentStatus(value: string, name: string): string | null {
  * @see runner.ts setEmailSendCallback()
  */
 let emailSendCallback: SandboxEmailSendCallback | null = null;
+/** Module-level ctx.ai.run() callback, set by the runner like emailSendCallback. */
+let aiRunCallback: SandboxAiRunCallback | null = null;
 const CONTENT_CREATE_CALLBACKS_KEY = Symbol.for("emdash:sandbox-content-create-callbacks");
 const TAXONOMY_WRITE_CALLBACKS_KEY = Symbol.for("emdash:sandbox-taxonomy-write-callbacks");
 const CONTENT_ACTION_CALLBACKS_KEY = Symbol.for("emdash:sandbox-content-action-callbacks");
@@ -164,6 +167,14 @@ function contentActionCallbacks(): Map<string, ContentActionCallbacks> {
  */
 export function setEmailSendCallback(callback: SandboxEmailSendCallback | null): void {
 	emailSendCallback = callback;
+}
+
+/**
+ * Set the AI run callback for all bridge instances.
+ * Called by the runner when the AiPipeline is available.
+ */
+export function setAiRunCallback(callback: SandboxAiRunCallback | null): void {
+	aiRunCallback = callback;
 }
 
 export function setContentCreateCallback(
@@ -1946,6 +1957,19 @@ export class PluginBridge extends WorkerEntrypoint<PluginBridgeEnv, PluginBridge
 			throw new Error("Email is not configured. No email provider is available.");
 		}
 		await emailSendCallback(message, pluginId);
+	}
+
+	async aiRun(
+		request: Parameters<SandboxAiRunCallback>[0],
+	): Promise<Awaited<ReturnType<SandboxAiRunCallback>>> {
+		const { capabilities, pluginId } = this.ctx.props;
+		if (!capabilities.includes("ai:run")) {
+			throw new Error("Missing capability: ai:run");
+		}
+		if (!aiRunCallback) {
+			throw new Error("AI is not configured. No AI provider is available.");
+		}
+		return aiRunCallback(request, pluginId);
 	}
 
 	async cronSchedule(

@@ -111,6 +111,15 @@ export const CAPABILITY_DESCRIPTIONS: Readonly<
 		label: "Provide the email transport",
 		description: "Deliver every message sent by the site, replacing the current transport.",
 	},
+	"ai:run": {
+		label: "Run AI models",
+		description: "Generate text with your site’s configured AI provider, billed to your account.",
+	},
+	"hooks.ai-provider:register": {
+		label: "Provide AI models",
+		description:
+			"Answer every AI request from plugins on your site, replacing the current provider.",
+	},
 	"hooks.page-fragments:register": {
 		label: "Add page scripts and styles",
 		description: "Inject script or style fragments into rendered pages.",

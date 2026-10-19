@@ -386,8 +386,10 @@ const CURRENT_CAPABILITIES = new Set<string>([
 	"media:write",
 	"users:read",
 	"email:send",
+	"ai:run",
 	"hooks.email-transport:register",
 	"hooks.email-events:register",
+	"hooks.ai-provider:register",
 	"hooks.page-fragments:register",
 ]);
 

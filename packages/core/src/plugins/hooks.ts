@@ -34,6 +34,7 @@ import type {
 	EmailBeforeSendHandler,
 	EmailDeliverHandler,
 	EmailAfterSendHandler,
+	AiGenerateHandler,
 	ContentBeforeSaveHandler,
 	ContentAfterSaveHandler,
 	ContentBeforeDeleteHandler,
@@ -96,6 +97,7 @@ type HookNameV2 =
 	| "email:beforeSend"
 	| "email:deliver"
 	| "email:afterSend"
+	| "ai:generate"
 	| "comment:beforeCreate"
 	| "comment:moderate"
 	| "comment:afterCreate"
@@ -153,6 +155,7 @@ interface HookHandlerMap {
 	"email:beforeSend": EmailBeforeSendHandler;
 	"email:deliver": EmailDeliverHandler;
 	"email:afterSend": EmailAfterSendHandler;
+	"ai:generate": AiGenerateHandler;
 	"comment:beforeCreate": CommentBeforeCreateHandler;
 	"comment:moderate": CommentModerateHandler;
 	"comment:afterCreate": CommentAfterCreateHandler;
@@ -305,6 +308,7 @@ export class HookPipeline {
 			this.registerPluginHook(plugin, "email:beforeSend");
 			this.registerPluginHook(plugin, "email:deliver");
 			this.registerPluginHook(plugin, "email:afterSend");
+			this.registerPluginHook(plugin, "ai:generate");
 			this.registerPluginHook(plugin, "comment:beforeCreate");
 			this.registerPluginHook(plugin, "comment:moderate");
 			this.registerPluginHook(plugin, "comment:afterCreate");
@@ -337,6 +341,9 @@ export class HookPipeline {
 		["email:beforeSend", "hooks.email-events:register"],
 		["email:afterSend", "hooks.email-events:register"],
 		["email:deliver", "hooks.email-transport:register"],
+		// AI — registering the ai:generate provider is distinct from ai:run,
+		// which only lets a plugin call ctx.ai.
+		["ai:generate", "hooks.ai-provider:register"],
 		// Content — beforeSave can mutate content, so requires content:write.
 		// afterSave is read-only notification, so content:read suffices.
 		["content:beforeSave", "content:write"],

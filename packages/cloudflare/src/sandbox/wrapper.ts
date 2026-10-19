@@ -50,6 +50,7 @@ export function generatePluginWrapper(manifest: PluginManifest, options?: Wrappe
 		capabilities.includes("content:restore");
 	const hasReadUsers = capabilities.includes("users:read");
 	const hasEmailSend = capabilities.includes("email:send");
+	const hasAiRun = capabilities.includes("ai:run");
 	const hasReadComments = capabilities.includes("comments:read");
 	const hasModerateComments = capabilities.includes("comments:moderate");
 	const hasRedirectRead = capabilities.includes("redirects:read");
@@ -359,6 +360,11 @@ function createContext(env, originHook, invocationId) {
 		send: (message) => bridge.emailSend(message)
 	} : undefined;
 
+	// AI access - proxies to bridge (capability enforced by bridge)
+	const ai = ${hasAiRun} ? {
+		run: (request) => bridge.aiRun(request)
+	} : undefined;
+
 	const cron = {
 		schedule: (name, opts) => bridge.cronSchedule(name, opts),
 		cancel: (name) => bridge.cronCancel(name),
@@ -386,6 +392,7 @@ function createContext(env, originHook, invocationId) {
 		users,
 		comments,
 		email,
+		ai,
 		cron
 	};
 }

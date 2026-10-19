@@ -34,6 +34,39 @@ const _adminEditorDraftReadConstraintsSchema = /*#__PURE__*/ v.object({
 		),
 	),
 });
+const _aiAccessSchema = /*#__PURE__*/ v.object({
+	$type: /*#__PURE__*/ v.optional(
+		/*#__PURE__*/ v.literal(
+			"com.emdashcms.experimental.package.releaseExtension#aiAccess",
+		),
+	),
+	/**
+	 * Plugin becomes the host's AI provider; it receives every AI request plugins on the site make, including their prompts. Exclusive: installing replaces the current provider.
+	 */
+	get provider() {
+		return /*#__PURE__*/ v.optional(aiProviderConstraintsSchema);
+	},
+	/**
+	 * Plugin may send prompts to the host's AI provider and read the generated text. Usage is billed to the site owner's provider account.
+	 */
+	get run() {
+		return /*#__PURE__*/ v.optional(aiRunConstraintsSchema);
+	},
+});
+const _aiProviderConstraintsSchema = /*#__PURE__*/ v.object({
+	$type: /*#__PURE__*/ v.optional(
+		/*#__PURE__*/ v.literal(
+			"com.emdashcms.experimental.package.releaseExtension#aiProviderConstraints",
+		),
+	),
+});
+const _aiRunConstraintsSchema = /*#__PURE__*/ v.object({
+	$type: /*#__PURE__*/ v.optional(
+		/*#__PURE__*/ v.literal(
+			"com.emdashcms.experimental.package.releaseExtension#aiRunConstraints",
+		),
+	),
+});
 const _bylinesAccessSchema = /*#__PURE__*/ v.object({
 	$type: /*#__PURE__*/ v.optional(
 		/*#__PURE__*/ v.literal(
@@ -183,6 +216,12 @@ const _declaredAccessSchema = /*#__PURE__*/ v.object({
 	 */
 	get admin() {
 		return /*#__PURE__*/ v.optional(adminAccessSchema);
+	},
+	/**
+	 * Running AI models through the host's configured AI provider, and acting as that provider.
+	 */
+	get ai() {
+		return /*#__PURE__*/ v.optional(aiAccessSchema);
 	},
 	/**
 	 * Read access to public byline profiles and the bylines credited on content entries.
@@ -581,6 +620,9 @@ type adminEditorDraftPatchConstraints$schematype =
 	typeof _adminEditorDraftPatchConstraintsSchema;
 type adminEditorDraftReadConstraints$schematype =
 	typeof _adminEditorDraftReadConstraintsSchema;
+type aiAccess$schematype = typeof _aiAccessSchema;
+type aiProviderConstraints$schematype = typeof _aiProviderConstraintsSchema;
+type aiRunConstraints$schematype = typeof _aiRunConstraintsSchema;
 type bylinesAccess$schematype = typeof _bylinesAccessSchema;
 type bylinesReadConstraints$schematype = typeof _bylinesReadConstraintsSchema;
 type commentsAccess$schematype = typeof _commentsAccessSchema;
@@ -637,6 +679,9 @@ type usersReadConstraints$schematype = typeof _usersReadConstraintsSchema;
 export interface adminAccessSchema extends adminAccess$schematype {}
 export interface adminEditorDraftPatchConstraintsSchema extends adminEditorDraftPatchConstraints$schematype {}
 export interface adminEditorDraftReadConstraintsSchema extends adminEditorDraftReadConstraints$schematype {}
+export interface aiAccessSchema extends aiAccess$schematype {}
+export interface aiProviderConstraintsSchema extends aiProviderConstraints$schematype {}
+export interface aiRunConstraintsSchema extends aiRunConstraints$schematype {}
 export interface bylinesAccessSchema extends bylinesAccess$schematype {}
 export interface bylinesReadConstraintsSchema extends bylinesReadConstraints$schematype {}
 export interface commentsAccessSchema extends commentsAccess$schematype {}
@@ -681,6 +726,11 @@ export const adminEditorDraftPatchConstraintsSchema =
 	_adminEditorDraftPatchConstraintsSchema as adminEditorDraftPatchConstraintsSchema;
 export const adminEditorDraftReadConstraintsSchema =
 	_adminEditorDraftReadConstraintsSchema as adminEditorDraftReadConstraintsSchema;
+export const aiAccessSchema = _aiAccessSchema as aiAccessSchema;
+export const aiProviderConstraintsSchema =
+	_aiProviderConstraintsSchema as aiProviderConstraintsSchema;
+export const aiRunConstraintsSchema =
+	_aiRunConstraintsSchema as aiRunConstraintsSchema;
 export const bylinesAccessSchema = _bylinesAccessSchema as bylinesAccessSchema;
 export const bylinesReadConstraintsSchema =
 	_bylinesReadConstraintsSchema as bylinesReadConstraintsSchema;
@@ -754,6 +804,13 @@ export interface AdminEditorDraftPatchConstraints extends v.InferInput<
 > {}
 export interface AdminEditorDraftReadConstraints extends v.InferInput<
 	typeof adminEditorDraftReadConstraintsSchema
+> {}
+export interface AiAccess extends v.InferInput<typeof aiAccessSchema> {}
+export interface AiProviderConstraints extends v.InferInput<
+	typeof aiProviderConstraintsSchema
+> {}
+export interface AiRunConstraints extends v.InferInput<
+	typeof aiRunConstraintsSchema
 > {}
 export interface BylinesAccess extends v.InferInput<
 	typeof bylinesAccessSchema

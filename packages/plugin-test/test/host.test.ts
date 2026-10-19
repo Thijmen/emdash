@@ -650,6 +650,32 @@ describe("runtime plugin test host", () => {
 		);
 	});
 
+	it("answers ctx.ai.run() from the isolate with the test AI provider", async () => {
+		runtimeHost = await createPluginRuntimeTestHost();
+		const admin = await runtimeHost.fixtures.user({ email: "ai@example.com", role: "admin" });
+		runtimeHost.ai.respond({
+			text: "workerd",
+			model: "test-model",
+			usage: { inputTokens: 7, outputTokens: 1 },
+		});
+
+		const response = await runtimeHost.actions.routes.request("run-ai", {
+			user: admin,
+			headers: { "X-EmDash-Request": "1" },
+		});
+
+		await expect(response.json()).resolves.toMatchObject({
+			data: { text: "workerd", model: "test-model", usage: { inputTokens: 7, outputTokens: 1 } },
+		});
+		expect(runtimeHost.ai.requests()).toEqual([
+			{
+				messages: [{ role: "user", content: "Name the runtime host." }],
+				maxTokens: 16,
+				source: "marketplace-test",
+			},
+		]);
+	});
+
 	it("runs lifecycle, media, comment, scheduler, and email journeys through the isolate", async () => {
 		runtimeHost = await createPluginRuntimeTestHost();
 		await runtimeHost.fixtures.collection({

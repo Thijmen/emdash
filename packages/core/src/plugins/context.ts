@@ -52,6 +52,7 @@ import { markContentMediaUsageCollectionStaleSafely } from "../media/usage/conte
 import { SchemaRegistry } from "../schema/registry.js";
 import { invalidateSiteSettingsCache } from "../settings/index.js";
 import type { Storage } from "../storage/types.js";
+import type { AiPipeline } from "./ai.js";
 import { createBylineAccess } from "./byline-access.js";
 import { assertStorageKey } from "./conditional-storage.js";
 import { createContentAccess } from "./content-access.js";
@@ -80,6 +81,7 @@ import type {
 	SettingsAccess,
 	CronAccess,
 	EmailAccess,
+	AiAccess,
 	ContentAccess,
 	ContentAccessWithWrite,
 	VersionedContentItem,
@@ -1547,6 +1549,11 @@ export interface PluginContextFactoryOptions {
 	 */
 	emailPipeline?: EmailPipeline;
 	/**
+	 * AI pipeline instance for ctx.ai.
+	 * If not provided (or no provider configured), ctx.ai will be undefined.
+	 */
+	aiPipeline?: AiPipeline;
+	/**
 	 * Pre-resolved list of trusted proxy header names (from the runtime
 	 * `EmDashConfig.trustedProxyHeaders` or the env var). Plugin route
 	 * handlers pass this to `extractRequestMeta` so plugins see the same
@@ -1640,6 +1647,7 @@ export class PluginContextFactory {
 	private cronReschedule?: () => void;
 	private now: () => Date;
 	private emailPipeline?: EmailPipeline;
+	private aiPipeline?: AiPipeline;
 	private commentModerate?: PluginContextFactoryOptions["commentModerate"];
 	/**
 	 * Plugin IDs already warned about a missing media-write backend, so the
@@ -1661,6 +1669,7 @@ export class PluginContextFactory {
 		this.cronReschedule = options.cronReschedule;
 		this.now = options.now ?? (() => new Date());
 		this.emailPipeline = options.emailPipeline;
+		this.aiPipeline = options.aiPipeline;
 		this.commentModerate = options.commentModerate;
 	}
 
@@ -1846,6 +1855,16 @@ export class PluginContextFactory {
 			};
 		}
 
+		// AI access — requires ai:run capability AND a configured provider
+		let ai: AiAccess | undefined;
+		if (capabilities.has("ai:run") && this.aiPipeline?.isAvailable()) {
+			const pipeline = this.aiPipeline;
+			const pluginId = plugin.id;
+			ai = {
+				run: (request) => pipeline.run(request, pluginId),
+			};
+		}
+
 		return {
 			plugin: {
 				id: plugin.id,
@@ -1868,6 +1887,7 @@ export class PluginContextFactory {
 			comments,
 			cron,
 			email,
+			ai,
 		};
 	}
 }

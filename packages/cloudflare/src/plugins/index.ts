@@ -10,4 +10,9 @@ export {
 	createCloudflareEmailDeliver,
 	type CloudflareEmailConfig,
 } from "./cloudflare-email.js";
+export {
+	cloudflareAI,
+	createCloudflareAIGenerate,
+	type CloudflareAIConfig,
+} from "./cloudflare-ai.js";
 export { aiSearch, type AISearchConfig } from "./ai-search.js";

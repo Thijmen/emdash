@@ -126,6 +126,7 @@ export type {
 	SandboxOptions,
 	SandboxEmailMessage,
 	SandboxEmailSendCallback,
+	SandboxAiRunCallback,
 	SandboxCommentModerateCallback,
 	SandboxContentCreateCallback,
 	SandboxHttpFetchCallback,
@@ -253,6 +254,14 @@ export type {
 	EmailBeforeSendHandler,
 	EmailDeliverHandler,
 	EmailAfterSendHandler,
+
+	// AI types
+	AiAccess,
+	AiMessage,
+	AiRunRequest,
+	AiRunResult,
+	AiGenerateEvent,
+	AiGenerateHandler,
 
 	// Handler types
 	ContentBeforeSaveHandler,

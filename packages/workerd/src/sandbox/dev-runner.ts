@@ -22,6 +22,7 @@ import type {
 	SandboxInvocationOptions,
 	ContentActionCallbacks,
 	SandboxEmailSendCallback,
+	SandboxAiRunCallback,
 	SandboxCommentModerateCallback,
 	SandboxContentCreateCallback,
 	SandboxOptions,
@@ -63,6 +64,7 @@ export class MiniflareDevRunner implements SandboxRunner {
 		trailingSlash?: "always" | "never" | "ignore";
 	};
 	private emailSendCallback: SandboxEmailSendCallback | null = null;
+	private aiRunCallback: SandboxAiRunCallback | null = null;
 	private commentModerateCallback: SandboxCommentModerateCallback | null = null;
 	private contentCreateCallback: SandboxContentCreateCallback | null = null;
 	private contentActionsCallback: ContentActionCallbacks | null = null;
@@ -90,6 +92,7 @@ export class MiniflareDevRunner implements SandboxRunner {
 		this.options = options;
 		this.siteInfo = options.siteInfo;
 		this.emailSendCallback = options.emailSend ?? null;
+		this.aiRunCallback = options.aiRun ?? null;
 		this.commentModerateCallback = options.commentModerate ?? null;
 		this.contentActionsCallback = options.contentActions ?? null;
 		this.devInvokeToken = randomBytes(32).toString("hex");
@@ -120,6 +123,10 @@ export class MiniflareDevRunner implements SandboxRunner {
 
 	setEmailSend(callback: SandboxEmailSendCallback | null): void {
 		this.emailSendCallback = callback;
+	}
+
+	setAiRun(callback: SandboxAiRunCallback | null): void {
+		this.aiRunCallback = callback;
 	}
 
 	setCommentModerate(callback: SandboxCommentModerateCallback | null): void {
@@ -213,6 +220,7 @@ export class MiniflareDevRunner implements SandboxRunner {
 				taxonomyWrite: this.options.taxonomyWrite,
 				contentActions: () => this.contentActionsCallback,
 				emailSend: () => this.emailSendCallback,
+				aiRun: () => this.aiRunCallback,
 				commentModerate: () => this.commentModerateCallback,
 				cronReschedule: () => this.cronRescheduleCallback?.(),
 				now: this.options.now,

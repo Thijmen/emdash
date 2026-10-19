@@ -105,6 +105,11 @@
 					"ref": "#emailAccess",
 					"description": "Sending mail through the host's mail service, and participating in its delivery pipeline."
 				},
+				"ai": {
+					"type": "ref",
+					"ref": "#aiAccess",
+					"description": "Running AI models through the host's configured AI provider, and acting as that provider."
+				},
 				"page": {
 					"type": "ref",
 					"ref": "#pageAccess",
@@ -404,6 +409,30 @@
 		"emailTransportConstraints": {
 			"type": "object",
 			"description": "Constraint object for email.transport. No constraint keys are normatively defined here. Exclusivity is a property of the host extension point: clients treat email.transport as exclusive regardless of record contents."
+		},
+		"aiAccess": {
+			"type": "object",
+			"description": "Operations under ai.",
+			"properties": {
+				"run": {
+					"type": "ref",
+					"ref": "#aiRunConstraints",
+					"description": "Plugin may send prompts to the host's AI provider and read the generated text. Usage is billed to the site owner's provider account."
+				},
+				"provider": {
+					"type": "ref",
+					"ref": "#aiProviderConstraints",
+					"description": "Plugin becomes the host's AI provider; it receives every AI request plugins on the site make, including their prompts. Exclusive: installing replaces the current provider."
+				}
+			}
+		},
+		"aiRunConstraints": {
+			"type": "object",
+			"description": "Constraint object for ai.run. No constraint keys are normatively defined here; vocabulary for model allow-lists and token budgets is reserved for a follow-on RFC."
+		},
+		"aiProviderConstraints": {
+			"type": "object",
+			"description": "Constraint object for ai.provider. No constraint keys are normatively defined here. Exclusivity is a property of the host extension point: clients treat ai.provider as exclusive regardless of record contents."
 		},
 		"pageAccess": {
 			"type": "object",

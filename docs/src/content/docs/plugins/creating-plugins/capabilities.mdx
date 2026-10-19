@@ -53,6 +53,8 @@ Declare only what the plugin actually needs. The registry shows these capabiliti
 | `email:send`                        | `ctx.email.send()` (requires a configured email provider plugin)                  |
 | `hooks.email-transport:register`    | Allows registering the exclusive `email:deliver` hook (transport providers)       |
 | `hooks.email-events:register`       | Allows registering `email:beforeSend` / `email:afterSend` hooks                   |
+| `ai:run`                            | `ctx.ai.run()` (requires a configured AI provider plugin)                         |
+| `hooks.ai-provider:register`        | Allows registering the exclusive `ai:generate` hook (AI providers)                |
 | `hooks.page-fragments:register`     | Allows registering the `page:fragments` hook (native plugins only)                |
 
 The following rules affect which capabilities a plugin needs:
@@ -64,6 +66,7 @@ The following rules affect which capabilities a plugin needs:
 - **Publication policy is separate from content access.** `hooks.content-policy:register` lets a plugin inspect and reject publication state changes through policy hook events. It does not provide `ctx.content` or grant content editing or publication actions.
 - **`network:request:unrestricted` exists for user-configured URLs.** A webhook plugin where the operator types in the destination URL needs to reach hosts that aren't in the manifest. Plugins that always call known APIs should use `network:request` + `allowedHosts`.
 - **`email:send` is gated by configuration, not just the capability.** A plugin can declare `email:send`, but `ctx.email` will only be populated if some other plugin has registered an `email:deliver` transport.
+- **`ai:run` works the same way.** `ctx.ai` exists only when an active plugin provides `ai:generate`, such as `cloudflareAI()`. The provider holds the credentials and billing; the calling plugin never sees them.
 
 `content:read` returns safe entry identity, including the author ID, translation group, revision pointers, and row version. Use `getTranslations()` to discover locale siblings and `getPublicUrl()` to resolve a published route with the site's locale and trailing-slash rules. `getPublicUrl()` returns `null` for drafts, unroutable collections, missing slugs, and locales the site does not serve. It never returns a preview URL.
 
@@ -229,6 +232,25 @@ const comment = await ctx.comments!.setStatus!(commentId, "approved", {
 
 If another moderator changed the status after the plugin read it, `setStatus()` rejects with `COMMENT_STATUS_CONFLICT`. Read the comment again and recompute the decision before retrying. A request that overlaps an earlier transition before its status is visible rejects with `COMMENT_MODERATION_IN_PROGRESS`; wait for that transition to finish, then read the current comment before retrying. A successful transition runs `comment:afterModerate` once with `origin: { source: "plugin", pluginId }`. Approval sends the same core author notification as an administrator approval. Setting a comment to its current status is a no-op and does not run the hook or send another notification.
 
+### Running AI models
+
+`ai:run` sends a chat request to the site's AI provider and returns the generated text. The provider decides which models are allowed, applies its own default when the request names none, and attributes usage to the calling plugin:
+
+```ts title="src/plugin.ts"
+const result = await ctx.ai!.run({
+	messages: [
+		{ role: "system", content: "Write one-sentence summaries." },
+		{ role: "user", content: entryText },
+	],
+	maxTokens: 200,
+});
+ctx.log.info("Summary", { text: result.text, model: result.model, usage: result.usage });
+```
+
+`run()` rejects when no provider is configured, when the request is malformed, or when the provider fails, for example because the site restricts the model or its account has no credit. The answer arrives complete, not streamed, and the sandbox's wall-time limit includes the time the model takes.
+
+A provider registers the exclusive `ai:generate` hook with `hooks.ai-provider:register`. It receives every request and the calling plugin's ID as `source`. Like email transports, a provider plugin sees all prompts on the site.
+
 ## Network host allowlists
 
 Plugins with `network:request` can only fetch hosts listed in `allowedHosts`. A leading `*.` matches both the named domain and its subdomains:
@@ -253,7 +275,7 @@ When a sandbox runner is active, the runtime enforces:
 
 <Steps>
 
-1. **Capability gating.** The PluginContext factory only populates `ctx.content`, `ctx.comments`, `ctx.schema`, `ctx.taxonomies`, `ctx.redirects`, `ctx.media`, `ctx.http`, `ctx.users`, `ctx.email` when the corresponding capability is declared. Calling a method on an undeclared capability isn't possible — there's no object there.
+1. **Capability gating.** The PluginContext factory only populates `ctx.content`, `ctx.comments`, `ctx.schema`, `ctx.taxonomies`, `ctx.redirects`, `ctx.media`, `ctx.http`, `ctx.users`, `ctx.email`, `ctx.ai` when the corresponding capability is declared. Calling a method on an undeclared capability isn't possible — there's no object there.
 
 2. **Storage and KV scoping.** Every storage and KV operation is scoped to the runtime plugin ID. A plugin can't read another plugin's KV or storage collections, and it can access only collections declared in its manifest.
 

@@ -21,6 +21,7 @@ import {
 	type SandboxedPluginInstance,
 	type SandboxInvocationOptions,
 	type SandboxEmailSendCallback,
+	type SandboxAiRunCallback,
 	type SandboxCommentModerateCallback,
 	type SandboxContentCreateCallback,
 	type ContentActionCallbacks,
@@ -41,6 +42,7 @@ import {
 	setCronNowCallback,
 	setCronRescheduleCallback,
 	setEmailSendCallback,
+	setAiRunCallback,
 	setMediaStorageCallback,
 	setTaxonomyWriteCallback,
 	setHttpFetchCallback,
@@ -159,6 +161,7 @@ export class CloudflareSandboxRunner implements SandboxRunner {
 
 		// Wire email send callback if provided at construction time
 		setEmailSendCallback(options.emailSend ?? null);
+		setAiRunCallback(options.aiRun ?? null);
 		setContentActionsCallback(this.contentActionsRuntimeId, options.contentActions ?? null);
 		setCronNowCallback(options.now ?? null);
 		if (options.mediaStorage) {
@@ -176,6 +179,10 @@ export class CloudflareSandboxRunner implements SandboxRunner {
 	 */
 	setEmailSend(callback: SandboxEmailSendCallback | null): void {
 		setEmailSendCallback(callback);
+	}
+
+	setAiRun(callback: SandboxAiRunCallback | null): void {
+		setAiRunCallback(callback);
 	}
 
 	setCommentModerate(callback: SandboxCommentModerateCallback | null): void {

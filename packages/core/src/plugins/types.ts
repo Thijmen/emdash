@@ -1109,6 +1109,9 @@ export interface PluginContext<TStorage extends PluginStorageConfig = PluginStor
 
 	/** Email access - only if email:send capability and a provider is configured */
 	email?: EmailAccess;
+
+	/** AI access - only if ai:run capability and an AI provider is configured */
+	ai?: AiAccess;
 }
 
 // =============================================================================
@@ -1228,6 +1231,61 @@ export type EmailAfterSendHandler = (
 	event: EmailAfterSendEvent,
 	ctx: PluginContext,
 ) => Promise<void>;
+
+// =============================================================================
+// AI Types
+// =============================================================================
+
+/**
+ * AI access interface — requires the `ai:run` capability.
+ * Undefined when no `ai:generate` provider is configured.
+ *
+ * Related capabilities:
+ * - `ai:run` — grants ctx.ai (this interface)
+ * - `hooks.ai-provider:register` — allows registering the `ai:generate` exclusive hook
+ */
+export interface AiAccess {
+	run(request: AiRunRequest): Promise<AiRunResult>;
+}
+
+export interface AiMessage {
+	role: "system" | "user" | "assistant";
+	content: string;
+}
+
+export interface AiRunRequest {
+	/** Model id as the provider names it. Omit to use the provider's default model. */
+	model?: string;
+	messages: AiMessage[];
+	maxTokens?: number;
+	temperature?: number;
+}
+
+export interface AiRunResult {
+	text: string;
+	/** The model that answered, as reported by the provider. */
+	model: string;
+	usage?: { inputTokens: number; outputTokens: number };
+	/** Why generation stopped, e.g. `stop` or `length`. */
+	finishReason?: string;
+}
+
+/**
+ * Event passed to the ai:generate hook (exclusive — exactly one provider answers)
+ */
+export interface AiGenerateEvent {
+	request: AiRunRequest;
+	/** ID of the plugin that called ctx.ai.run() */
+	source: string;
+}
+
+/**
+ * Handler type for the ai:generate hook (exclusive provider).
+ */
+export type AiGenerateHandler = (
+	event: AiGenerateEvent,
+	ctx: PluginContext,
+) => Promise<AiRunResult>;
 
 // =============================================================================
 // Comment Types
@@ -1809,6 +1867,9 @@ export interface PluginHooks {
 	"email:deliver"?: HookConfig<EmailDeliverHandler> | EmailDeliverHandler;
 	"email:afterSend"?: HookConfig<EmailAfterSendHandler> | EmailAfterSendHandler;
 
+	// AI hooks
+	"ai:generate"?: HookConfig<AiGenerateHandler> | AiGenerateHandler;
+
 	// Comment hooks
 	"comment:beforeCreate"?: HookConfig<CommentBeforeCreateHandler> | CommentBeforeCreateHandler;
 	"comment:moderate"?: HookConfig<CommentModerateHandler> | CommentModerateHandler;
@@ -2217,6 +2278,7 @@ export interface ResolvedPluginHooks {
 	"email:beforeSend"?: ResolvedHook<EmailBeforeSendHandler>;
 	"email:deliver"?: ResolvedHook<EmailDeliverHandler>;
 	"email:afterSend"?: ResolvedHook<EmailAfterSendHandler>;
+	"ai:generate"?: ResolvedHook<AiGenerateHandler>;
 	"comment:beforeCreate"?: ResolvedHook<CommentBeforeCreateHandler>;
 	"comment:moderate"?: ResolvedHook<CommentModerateHandler>;
 	"comment:afterCreate"?: ResolvedHook<CommentAfterCreateHandler>;

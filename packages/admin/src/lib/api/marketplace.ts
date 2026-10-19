@@ -444,6 +444,8 @@ export const CAPABILITY_LABELS: Record<string, MessageDescriptor> = {
 	"email:send": msg`Send email through your site`,
 	"hooks.email-events:register": msg`Read and change email your site sends`,
 	"hooks.email-transport:register": msg`Deliver all email your site sends`,
+	"ai:run": msg`Run AI models through your site's AI provider, billed to your account`,
+	"hooks.ai-provider:register": msg`Answer all AI requests from plugins on your site, including their prompts`,
 	"hooks.page-fragments:register": msg`Add scripts and styles to your site's pages`,
 	// Legacy aliases (still emitted by older installed manifests)
 	"read:content": msg`Read your content`,

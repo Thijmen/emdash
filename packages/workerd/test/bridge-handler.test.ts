@@ -1184,6 +1184,53 @@ describe("Bridge Handler Conformance", () => {
 		});
 	});
 
+	// ── AI ────────────────────────────────────────────────────────────────
+
+	describe("ai", () => {
+		const request = { messages: [{ role: "user", content: "hi" }], maxTokens: 8 };
+
+		it("rejects ai/run without the ai:run capability", async () => {
+			const run = vi.fn();
+			const handler = createBridgeHandler({
+				pluginId: "writer",
+				version: "1.0.0",
+				capabilities: [],
+				allowedHosts: [],
+				storageCollections: [],
+				db,
+				emailSend: () => null,
+				aiRun: () => run,
+			});
+			const result = await call(handler, "ai/run", { request });
+			expect(result.error).toContain("Missing capability: ai:run");
+			expect(run).not.toHaveBeenCalled();
+		});
+
+		it("reports a site without an AI provider", async () => {
+			const handler = makeHandler({ capabilities: ["ai:run"] });
+			const result = await call(handler, "ai/run", { request });
+			expect(result.error).toContain("AI is not configured");
+		});
+
+		it("runs the request as the calling plugin and returns the result", async () => {
+			const run = vi.fn(async () => ({ text: "hello", model: "m" }));
+			const handler = createBridgeHandler({
+				pluginId: "writer",
+				version: "1.0.0",
+				capabilities: ["ai:run"],
+				allowedHosts: [],
+				storageCollections: [],
+				db,
+				emailSend: () => null,
+				aiRun: () => run,
+			});
+			const result = await call(handler, "ai/run", { request });
+			expect(result.error).toBeUndefined();
+			expect(result.result).toEqual({ text: "hello", model: "m" });
+			expect(run).toHaveBeenCalledWith(request, "writer");
+		});
+	});
+
 	// ── Storage (document store) ──────────────────────────────────────────
 
 	describe("plugin storage", () => {

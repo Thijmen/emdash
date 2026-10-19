@@ -52,8 +52,10 @@ export const CURRENT_PLUGIN_CAPABILITIES = [
 	"media:write",
 	"users:read",
 	"email:send",
+	"ai:run",
 	"hooks.email-transport:register",
 	"hooks.email-events:register",
+	"hooks.ai-provider:register",
 	"hooks.page-fragments:register",
 ] as const;
 
@@ -131,6 +133,7 @@ export const HOOK_NAMES = [
 	"email:beforeSend",
 	"email:deliver",
 	"email:afterSend",
+	"ai:generate",
 	"comment:beforeCreate",
 	"comment:moderate",
 	"comment:afterCreate",
@@ -435,6 +438,9 @@ const declaredAccessSchema = z.object({
 			events: accessConstraints.optional(),
 			transport: accessConstraints.optional(),
 		})
+		.optional(),
+	ai: z
+		.object({ run: accessConstraints.optional(), provider: accessConstraints.optional() })
 		.optional(),
 	page: z.object({ fragments: accessConstraints.optional() }).optional(),
 	users: z.object({ read: accessConstraints.optional() }).optional(),

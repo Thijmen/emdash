@@ -23,6 +23,8 @@ export default defineConfig({
 		// `createPlugin` from it (#1721).
 		"src/plugins/cloudflare-email.ts",
 		"src/plugins/cloudflare-email-env.ts",
+		"src/plugins/cloudflare-ai.ts",
+		"src/plugins/cloudflare-ai-env.ts",
 		"src/plugins/ai-search.ts",
 		"src/plugins/ai-search-admin.tsx",
 

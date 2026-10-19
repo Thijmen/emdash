@@ -335,6 +335,13 @@ const plugin: SandboxedPlugin = {
 			handler: async (event, ctx) =>
 				record(ctx, "events", "email-after-send", { source: event.source }),
 		},
+		"ai:generate": {
+			exclusive: true,
+			handler: async (event, ctx) => {
+				await record(ctx, "events", "ai-generate", { source: event.source });
+				return { text: "Registry fixture answer", model: event.request.model ?? "fixture-model" };
+			},
+		},
 		"page:metadata": async (event) => [
 			{ kind: "meta", name: "emdash-plugin", content: "marketplace-test" },
 			{
@@ -1245,6 +1252,15 @@ const plugin: SandboxedPlugin = {
 				return { sent: true };
 			},
 		},
+		"run-ai": {
+			handler: async (_route, ctx) => {
+				if (!ctx.ai) throw new Error("ctx.ai is not available");
+				return ctx.ai.run({
+					messages: [{ role: "user", content: "Name the runtime host." }],
+					maxTokens: 16,
+				});
+			},
+		},
 		"storage-exercise": {
 			permission: "plugins:manage",
 			handler: async (_route, ctx) => {
@@ -1462,6 +1478,7 @@ const plugin: SandboxedPlugin = {
 					users: ctx.users !== undefined,
 					comments: ctx.comments !== undefined,
 					email: ctx.email !== undefined,
+					ai: ctx.ai !== undefined,
 				},
 			}),
 		},

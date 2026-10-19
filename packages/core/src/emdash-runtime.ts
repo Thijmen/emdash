@@ -264,6 +264,7 @@ import {
 } from "./index.js";
 import { getDb } from "./loader.js";
 import { isRecord } from "./plugin-utils.js";
+import { AiPipeline } from "./plugins/ai.js";
 import { CronExecutor, setCronTasksEnabled, type InvokeCronHookFn } from "./plugins/cron.js";
 import { definePlugin } from "./plugins/define-plugin.js";
 import { DEV_CONSOLE_EMAIL_PLUGIN_ID, devConsoleEmailDeliver } from "./plugins/email-console.js";
@@ -516,6 +517,7 @@ export interface EmDashRuntimeParts {
 	cronExecutor: CronExecutor | null;
 	cronScheduler: CronScheduler | null;
 	emailPipeline: EmailPipeline | null;
+	aiPipeline: AiPipeline | null;
 	allPipelinePlugins: ResolvedPlugin[];
 	pipelineFactoryOptions: {
 		db: Kysely<Database>;
@@ -788,6 +790,7 @@ export class EmDashRuntime {
 	readonly mediaProviderEntries: MediaProviderEntry[];
 	readonly cronExecutor: CronExecutor | null;
 	readonly email: EmailPipeline | null;
+	readonly ai: AiPipeline | null;
 
 	private cronScheduler: CronScheduler | null;
 	private enabledPlugins: Set<string>;
@@ -887,6 +890,7 @@ export class EmDashRuntime {
 		this.cronExecutor = parts.cronExecutor;
 		this.cronScheduler = parts.cronScheduler;
 		this.email = parts.emailPipeline;
+		this.ai = parts.aiPipeline;
 		this.allPipelinePlugins = parts.allPipelinePlugins;
 		this.pipelineFactoryOptions = parts.pipelineFactoryOptions;
 		this.runtimeDeps = parts.runtimeDeps;
@@ -1242,6 +1246,9 @@ export class EmDashRuntime {
 			// pipelineFactoryOptions), so the merge only adds emailPipeline.
 			newPipeline.setContextFactory({ emailPipeline: this.email });
 		}
+		if (this.ai) {
+			newPipeline.setContextFactory({ aiPipeline: this.ai });
+		}
 		newPipeline.setContextFactory({
 			// Plugin schedules remain database-backed when no in-process scheduler
 			// exists; an external trigger is responsible for invoking due tasks.
@@ -1251,6 +1258,9 @@ export class EmDashRuntime {
 		// Update the email pipeline to use the new hook pipeline
 		if (this.email) {
 			this.email.setPipeline(newPipeline);
+		}
+		if (this.ai) {
+			this.ai.setPipeline(newPipeline);
 		}
 
 		// Update the mutable ref so the cron closure dispatches through
@@ -2208,6 +2218,11 @@ export class EmDashRuntime {
 			sandboxRunner.setEmailSend((message, pluginId) => emailPipeline.send(message, pluginId));
 		}
 
+		// ── AI pipeline ──────────────────────────────────────────────────
+		// Dispatches ctx.ai.run() to the selected ai:generate provider.
+		const aiPipeline = new AiPipeline(pipeline);
+		sandboxRunner?.setAiRun?.((request, pluginId) => aiPipeline.run(request, pluginId));
+
 		// ── Cron system ──────────────────────────────────────────────────
 		// Create executor with a hook dispatch function that uses the pipeline.
 		// The callback reads from a mutable ref so that rebuildHookPipeline()
@@ -2220,11 +2235,11 @@ export class EmDashRuntime {
 			}
 		};
 
-		// Wire email pipeline into context factory (independent of cron —
-		// must not be inside the cron try/catch or ctx.email breaks when cron fails).
-		// db/getDb were already set via pipelineFactoryOptions above; merge only
-		// adds emailPipeline.
-		pipeline.setContextFactory({ emailPipeline });
+		// Wire the email and AI pipelines into the context factory (independent of
+		// cron — must not be inside the cron try/catch or ctx.email and ctx.ai break
+		// when cron fails). db/getDb were already set via pipelineFactoryOptions
+		// above; the merge only adds the pipelines.
+		pipeline.setContextFactory({ emailPipeline, aiPipeline });
 
 		let cronExecutor: CronExecutor | null = null;
 		let cronScheduler: CronScheduler | null = null;
@@ -2315,6 +2330,7 @@ export class EmDashRuntime {
 			cronExecutor,
 			cronScheduler,
 			emailPipeline,
+			aiPipeline,
 			allPipelinePlugins,
 			pipelineFactoryOptions,
 			runtimeDeps: deps,
@@ -5676,6 +5692,7 @@ export class EmDashRuntime {
 				...this.pipelineFactoryOptions,
 				contentActions: this.contentActionsWithInvalidator(invalidateContentCache),
 				emailPipeline: this.email ?? undefined,
+				aiPipeline: this.ai ?? undefined,
 				cronReschedule: () => this.cronScheduler?.reschedule(),
 				trustedProxyHeaders: getTrustedProxyHeaders(this.config),
 			});

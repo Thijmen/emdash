@@ -55,6 +55,7 @@ import type {
 	RedirectUpdateInput,
 	PluginHttpResponseWire,
 	SandboxEmailSendCallback,
+	SandboxAiRunCallback,
 	PluginSecretRedactor,
 	SettingField,
 	SandboxContentCreateCallback,
@@ -193,6 +194,7 @@ export interface BridgeHandlerOptions {
 	taxonomyWrite?: TaxonomyAccessWithWrite;
 	contentActions?: () => ContentActionCallbacks | null;
 	emailSend: () => SandboxEmailSendCallback | null;
+	aiRun?: () => SandboxAiRunCallback | null;
 	commentModerate?: () => SandboxCommentModerateCallback | null;
 	cronReschedule?: () => void;
 	now?: () => Date;
@@ -832,6 +834,19 @@ async function dispatch(
 			if (!emailSend) throw new Error("Email is not configured. No email provider is available.");
 			await emailSend(message, pluginId);
 			return null;
+		}
+
+		// ── AI ──────────────────────────────────────────────────────────
+		case "ai/run": {
+			requireCapability(opts, "ai:run");
+			const request = body.request;
+			if (!request || typeof request !== "object")
+				throw new Error("ai/run requires a request object");
+			const aiRun = opts.aiRun?.();
+			if (!aiRun) throw new Error("AI is not configured. No AI provider is available.");
+			// The AiPipeline validates the request shape before any provider sees it.
+			// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- validated by the pipeline
+			return aiRun(request as Parameters<SandboxAiRunCallback>[0], pluginId);
 		}
 
 		// ── Users ───────────────────────────────────────────────────────

@@ -73,6 +73,10 @@
       "types": "./dist/plugins/cloudflare-email.d.mts",
       "default": "./dist/plugins/cloudflare-email.mjs"
     },
+    "./plugins/cloudflare-ai": {
+      "types": "./dist/plugins/cloudflare-ai.d.mts",
+      "default": "./dist/plugins/cloudflare-ai.mjs"
+    },
     "./plugins/ai-search": {
       "types": "./dist/plugins/ai-search.d.mts",
       "default": "./dist/plugins/ai-search.mjs"

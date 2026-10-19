@@ -143,6 +143,21 @@ describe("declaredAccess facet mapping", () => {
 		});
 	});
 
+	it("round-trips the ai facets, which no other capability implies", () => {
+		for (const capabilities of [
+			["ai:run"],
+			["hooks.ai-provider:register"],
+			["ai:run", "hooks.ai-provider:register"],
+		]) {
+			const access = capabilitiesToDeclaredAccess(capabilities, []);
+			expect(Object.keys(access)).toEqual(["ai"]);
+			expect(new Set(declaredAccessToCapabilities(access).capabilities)).toEqual(
+				new Set(capabilities),
+			);
+		}
+		expect(capabilitiesToDeclaredAccess(["ai:run"], [])).toEqual({ ai: { run: {} } });
+	});
+
 	it("maps each hook-registration capability to its participation facet", () => {
 		expect(capabilitiesToDeclaredAccess(["hooks.content-policy:register"], [])).toEqual({
 			content: { policy: {} },
@@ -155,6 +170,9 @@ describe("declaredAccess facet mapping", () => {
 		});
 		expect(capabilitiesToDeclaredAccess(["hooks.page-fragments:register"], [])).toEqual({
 			page: { fragments: {} },
+		});
+		expect(capabilitiesToDeclaredAccess(["hooks.ai-provider:register"], [])).toEqual({
+			ai: { provider: {} },
 		});
 		expect(capabilitiesToDeclaredAccess(["users:read"], [])).toEqual({ users: { read: {} } });
 		expect(capabilitiesToDeclaredAccess(["taxonomies:read"], [])).toEqual({

@@ -34,6 +34,7 @@ import type {
 	SandboxCommentModerateCallback,
 	SandboxInvocationOptions,
 	SandboxEmailSendCallback,
+	SandboxAiRunCallback,
 	SandboxContentCreateCallback,
 	SandboxOptions,
 	SandboxRunnerFactory,
@@ -328,6 +329,8 @@ export class WorkerdSandboxRunner implements SandboxRunner {
 
 	/** Email send callback, wired from EmailPipeline */
 	private emailSendCallback: SandboxEmailSendCallback | null = null;
+	/** ctx.ai.run() callback, wired from AiPipeline */
+	private aiRunCallback: SandboxAiRunCallback | null = null;
 	private commentModerateCallback: SandboxCommentModerateCallback | null = null;
 	private contentCreateCallback: SandboxContentCreateCallback | null = null;
 	private contentActionsCallback: ContentActionCallbacks | null = null;
@@ -385,6 +388,7 @@ export class WorkerdSandboxRunner implements SandboxRunner {
 		this.limits = resolveLimits(options.limits);
 		this.siteInfo = options.siteInfo;
 		this.emailSendCallback = options.emailSend ?? null;
+		this.aiRunCallback = options.aiRun ?? null;
 		this.commentModerateCallback = options.commentModerate ?? null;
 		this.contentActionsCallback = options.contentActions ?? null;
 
@@ -528,6 +532,10 @@ export class WorkerdSandboxRunner implements SandboxRunner {
 	 */
 	setEmailSend(callback: SandboxEmailSendCallback | null): void {
 		this.emailSendCallback = callback;
+	}
+
+	setAiRun(callback: SandboxAiRunCallback | null): void {
+		this.aiRunCallback = callback;
 	}
 
 	setCommentModerate(callback: SandboxCommentModerateCallback | null): void {
@@ -977,6 +985,10 @@ export class WorkerdSandboxRunner implements SandboxRunner {
 	/** Get the email send callback */
 	get emailSend() {
 		return this.emailSendCallback;
+	}
+
+	get aiRun() {
+		return this.aiRunCallback;
 	}
 
 	get commentModerate() {

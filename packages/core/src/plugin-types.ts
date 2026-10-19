@@ -51,6 +51,11 @@ import type { ZodType } from "zod";
 import type { SandboxHookErrorEnvelope } from "./plugins/sandbox/hook-result.js";
 import type {
 	ActorInfo,
+	AiGenerateEvent,
+	AiGenerateHandler,
+	AiMessage,
+	AiRunRequest,
+	AiRunResult,
 	BylineAfterDeleteHandler,
 	BylineAfterSaveHandler,
 	CommentAfterCreateEvent,
@@ -138,6 +143,7 @@ export interface HookHandlers {
 	"email:beforeSend": EmailBeforeSendHandler;
 	"email:deliver": EmailDeliverHandler;
 	"email:afterSend": EmailAfterSendHandler;
+	"ai:generate": AiGenerateHandler;
 	"comment:beforeCreate": CommentBeforeCreateHandler;
 	"comment:moderate": CommentModerateHandler;
 	"comment:afterCreate": CommentAfterCreateHandler;
@@ -358,6 +364,11 @@ export type { NumericDelta, UpdateIfArgs, UpdateIfResult } from "./plugins/types
  */
 export type {
 	ActorInfo,
+	AiGenerateEvent,
+	AiGenerateHandler,
+	AiMessage,
+	AiRunRequest,
+	AiRunResult,
 	CommentAfterCreateEvent,
 	CommentAfterModerateEvent,
 	CommentBeforeCreateEvent,

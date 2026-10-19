@@ -33,6 +33,7 @@ type ContextApiRoutes = {
 	comments: Record<MethodKeys<NonNullable<PluginContext["comments"]>>, string | null>;
 	cron: Record<MethodKeys<NonNullable<PluginContext["cron"]>>, string | null>;
 	email: Record<MethodKeys<NonNullable<PluginContext["email"]>>, string | null>;
+	ai: Record<MethodKeys<NonNullable<PluginContext["ai"]>>, string | null>;
 	kv: Record<MethodKeys<PluginContext["kv"]>, string | null>;
 	settings: Record<MethodKeys<PluginContext["settings"]>, string | null>;
 	storage: Record<MethodKeys<PluginContext["storage"][string]>, string | null>;
@@ -94,6 +95,7 @@ const CONTEXT_API_ROUTES = {
 	},
 	cron: { schedule: "cron-exercise", cancel: "cron-exercise", list: "cron-exercise" },
 	email: { send: "send-email" },
+	ai: { run: "run-ai" },
 	kv: {
 		get: "kv-exercise",
 		getVersioned: "kv-exercise",
@@ -345,6 +347,12 @@ describe("registry fixture capability inventory", () => {
 		await expect(
 			host.invokeHook("email:afterSend", { message, source: "marketplace-test" }),
 		).resolves.toBeUndefined();
+		await expect(
+			host.invokeHook("ai:generate", {
+				request: { messages: [{ role: "user", content: "Hi" }] },
+				source: "marketplace-test",
+			}),
+		).resolves.toEqual({ text: "Registry fixture answer", model: "fixture-model" });
 		const page = {
 			url: "https://plugin.test/article",
 			path: "/article",
@@ -529,6 +537,7 @@ describe("registry fixture capability inventory", () => {
 				users: true,
 				comments: true,
 				email: true,
+				ai: true,
 			},
 		});
 		await expect(

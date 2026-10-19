@@ -89,6 +89,7 @@ export function generatePluginWrapper(manifest: PluginManifest, options: Wrapper
 		capabilities.includes("content:restore");
 	const hasReadUsers = capabilities.includes("users:read");
 	const hasEmailSend = capabilities.includes("email:send");
+	const hasAiRun = capabilities.includes("ai:run");
 	const hasReadComments = capabilities.includes("comments:read");
 	const hasModerateComments = capabilities.includes("comments:moderate");
 	const hasRedirectRead = capabilities.includes("redirects:read");
@@ -629,6 +630,10 @@ function createContext(originHook, invocationId) {
 		send: (message) => bridgeCall("email/send", { message }),
 	} : undefined;
 
+	const ai = ${hasAiRun} ? {
+		run: (request) => bridgeCall("ai/run", { request }),
+	} : undefined;
+
 	const cron = {
 		schedule: (name, opts) => bridgeCall("cron/schedule", { name, ...opts }),
 		cancel: (name) => bridgeCall("cron/cancel", { name }),
@@ -656,6 +661,7 @@ function createContext(originHook, invocationId) {
 		users,
 		comments,
 		email,
+		ai,
 		cron,
 	};
 }

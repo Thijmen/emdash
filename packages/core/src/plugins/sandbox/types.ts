@@ -13,6 +13,8 @@ import type { Kysely } from "kysely";
 import type { Database } from "../../database/types.js";
 import type { ContentActionCallbacks } from "../context.js";
 import type {
+	AiRunRequest,
+	AiRunResult,
 	ContentCreateOptions,
 	ContentItem,
 	ContentWriteInput,
@@ -75,6 +77,18 @@ export type SandboxEmailSendCallback = (
 	pluginId: string,
 ) => Promise<void>;
 
+/**
+ * Callback for ctx.ai.run() from a sandboxed plugin.
+ * The sandbox runner wires this up from the AiPipeline.
+ *
+ * @param request - The request as the plugin sent it (validated by the pipeline)
+ * @param pluginId - The calling plugin's ID (passed to the provider as source)
+ */
+export type SandboxAiRunCallback = (
+	request: AiRunRequest,
+	pluginId: string,
+) => Promise<AiRunResult>;
+
 export type SandboxCommentModerateCallback = (
 	pluginId: string,
 	id: string,
@@ -124,6 +138,8 @@ export interface SandboxOptions {
 	};
 	/** Email send callback, wired from the EmailPipeline by the runtime */
 	emailSend?: SandboxEmailSendCallback;
+	/** AI run callback, wired from the AiPipeline by the runtime */
+	aiRun?: SandboxAiRunCallback;
 	commentModerate?: SandboxCommentModerateCallback;
 	/** Optional host HTTP transport used by test hosts and custom runtimes. */
 	httpFetch?: SandboxHttpFetchCallback;
@@ -337,6 +353,8 @@ export interface SandboxRunner {
 	 * doesn't exist when the sandbox runner is constructed.
 	 */
 	setEmailSend(callback: SandboxEmailSendCallback | null): void;
+	/** Set the ctx.ai.run() callback for sandboxed plugins, once the AiPipeline exists. */
+	setAiRun?(callback: SandboxAiRunCallback | null): void;
 	setCommentModerate?(callback: SandboxCommentModerateCallback | null): void;
 	setContentCreate?(callback: SandboxContentCreateCallback | null): void;
 	setContentActions?(callback: ContentActionCallbacks | null): void;
