@@ -7,7 +7,7 @@ authors:
 champion: Thijmen Stavenuiter (@Thijmen)
 sponsor: TBD
 discussions:
-  - https://github.com/emdash-cms/emdash/discussions/XXX
+  - https://github.com/emdash-cms/emdash/discussions/4292
 created: 2026-10-19
 ---
 
